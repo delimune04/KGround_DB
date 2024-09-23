@@ -1,3 +1,10 @@
+import os
+import cv2
+import numpy as np
+from pdf2image import convert_from_path
+from multiprocessing import Pool, cpu_count
+from PIL import Image
+
 def detect_tables_in_image(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY_INV)

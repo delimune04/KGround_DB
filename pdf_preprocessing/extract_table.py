@@ -1,3 +1,10 @@
+import os
+import cv2
+import numpy as np
+from pdf2image import convert_from_path
+from multiprocessing import Pool, cpu_count
+from PIL import Image
+
 def extract_tables_from_pdf(args):
     pdf_file, input_directory, output_directory = args
     input_pdf_path = os.path.join(input_directory, pdf_file)
