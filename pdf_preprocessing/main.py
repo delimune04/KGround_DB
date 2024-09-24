@@ -1,5 +1,4 @@
 import os
-import sys
 from multiprocessing import Pool, cpu_count, freeze_support
 from extract_table import extract_tables_from_pdf
 
@@ -37,17 +36,10 @@ def main():
         print(f"유효하지 않은 입력입니다. 사용 가능한 CPU 수({available_cpus})로 설정합니다.")
         num_processes = available_cpus
 
-    # Poppler 경로 설정
-    if getattr(sys, 'frozen', False):
-        base_path = sys._MEIPASS
-    else:
-        base_path = os.path.abspath("src")
-
-    poppler_path = os.path.join(base_path, 'bin')
-
     # 멀티프로세싱
     with Pool(processes=num_processes) as pool:
-        args = [(pdf_file, input_directory, output_directory, poppler_path) for pdf_file in pdf_files]
+        # Use a generator expression to save memory
+        args = ((pdf_file, input_directory, output_directory) for pdf_file in pdf_files)
         pool.starmap(extract_tables_from_pdf, args)
 
 if __name__ == '__main__':
