@@ -1,10 +1,18 @@
 import os
+import sys
 import cv2
 import numpy as np
-from pdf2image import convert_from_path
+import fitz  # PyMuPDF
 from PIL import Image
 from detect_table import detect_tables_in_image
-from PyPDF2 import PdfReader  # 추가된 부분
+
+# 실행 파일 내에서 리소스 경로 설정
+if getattr(sys, 'frozen', False):
+    # PyInstaller에 의해 패키징된 경우
+    base_path = sys._MEIPASS
+else:
+    # 스크립트가 직접 실행되는 경우
+    base_path = os.path.dirname(os.path.abspath(__file__))
 
 
 def extract_tables_from_pdf(pdf_file, input_directory, output_directory):
@@ -15,52 +23,38 @@ def extract_tables_from_pdf(pdf_file, input_directory, output_directory):
     table_images = []
 
     try:
-        # PDF의 총 페이지 수를 얻어옵니다.
-        reader = PdfReader(input_pdf_path)
-        num_pages = len(reader.pages)
+        # PyMuPDF를 사용하여 PDF의 총 페이지 수를 얻습니다.
+        with fitz.open(input_pdf_path) as doc:
+            num_pages = doc.page_count
 
-        for page_number in range(num_pages):
-            try:
-                #print(f"{pdf_file} - {page_number + 1} 페이지를 처리 중입니다...")
+            for page_number in range(num_pages):
+                try:
+                    # 페이지를 가져옵니다.
+                    page = doc.load_page(page_number)
+                    # 페이지를 이미지로 변환합니다.
+                    pix = page.get_pixmap(dpi=150)
+                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
 
-                # 페이지를 한 장씩 이미지로 변환합니다.
-                images = convert_from_path(
-                    input_pdf_path, dpi=150, first_page=page_number + 1, last_page=page_number + 1
-                )
-                if not images:
-                    #print(f"{pdf_file} - {page_number + 1} 페이지를 변환하지 못했습니다.")
+                    # PIL 이미지를 OpenCV 이미지로 변환
+                    img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+
+                    # 표 영역 검출
+                    table_regions = detect_tables_in_image(img_cv)
+
+                    if not table_regions:
+                        continue
+
+                    for idx, (x, y, w, h) in enumerate(table_regions):
+                        table_img_cv = img_cv[y:y + h, x:x + w]
+
+                        # OpenCV 이미지를 PIL 이미지로 변환
+                        table_img_pil = Image.fromarray(cv2.cvtColor(table_img_cv, cv2.COLOR_BGR2RGB))
+
+                        table_images.append(table_img_pil)
+
+                except Exception as e:
+                    print(f"{pdf_file} - {page_number + 1} 페이지 처리 중 오류 발생: {e}")
                     continue
-
-                image = images[0]
-
-                # PIL 이미지를 OpenCV 이미지로 변환 (복사 최소화)
-                img_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-
-                # 표 영역 검출
-                table_regions = detect_tables_in_image(img_cv)
-                #print(f"{pdf_file} - {page_number + 1} 페이지에서 {len(table_regions)}개의 표를 검출했습니다.")
-
-                if not table_regions:
-                    continue
-
-                for idx, (x, y, w, h) in enumerate(table_regions):
-                    table_img_cv = img_cv[y:y+h, x:x+w]
-
-                    # OpenCV 이미지를 PIL 이미지로 변환
-                    table_img_pil = Image.fromarray(cv2.cvtColor(table_img_cv, cv2.COLOR_BGR2RGB))
-
-                    table_images.append(table_img_pil)
-                    #print(f"표 이미지를 리스트에 추가했습니다: 페이지 {page_number + 1}, 표 {idx + 1}")
-
-                # 메모리 해제
-                del image
-                del img_cv
-                del table_img_cv
-                del images
-
-            except Exception as e:
-                print(f"{pdf_file} - {page_number + 1} 페이지 처리 중 오류 발생: {e}")
-                continue
 
         if table_images:
             first_image = table_images[0]
